@@ -209,7 +209,10 @@ class Summarizer:
             remove_invalid_values=True,
         )
         self.logger.debug(f"summary: {summary}")
-        score = round(summary_pred_ids.sequences_scores.cpu().numpy()[0], 4)
+        if self.inference_params["num_beams"] == 1 and self.inference_params["num_beam_groups"] == 1:
+            score = 0
+        else:
+            score = round(summary_pred_ids.sequences_scores.cpu().numpy()[0], 4)
 
         return summary, score
 
