@@ -32,6 +32,7 @@ class Summarizer:
         batch_stride: int = 16,
         max_length_ratio: float = 0.25,
         load_in_8bit=False,
+        torch_dtype=None,
         **kwargs,
     ):
         """
@@ -44,6 +45,7 @@ class Summarizer:
         :param int batch_stride: the amount of tokens to stride the batch by, defaults to 16
         :param float max_length_ratio: the ratio of the token_batch_length to use as the max_length for the model, defaults to 0.25
         :param bool load_in_8bit: whether to load the model in 8bit precision (LLM.int8), defaults to False
+        :param int torch_dtype: pytorch data type to load model as, defauls to None (native model type)
         :param kwargs: additional keyword arguments to pass to the model as inference parameters
         """
         self.logger = logging.getLogger(__name__)
@@ -67,6 +69,7 @@ class Summarizer:
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(
                 self.model_name_or_path,
+                torch_dtype=torch_dtype,
             ).to(self.device)
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
