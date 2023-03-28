@@ -26,12 +26,13 @@ class Summarizer:
     def __init__(
         self,
         model_name_or_path: str = "pszemraj/long-t5-tglobal-base-16384-book-summary",
-        use_cuda: bool = True,
+        device: str = "cuda",
         is_general_attention_model: bool = True,
         token_batch_length: int = 2048,
         batch_stride: int = 16,
         max_length_ratio: float = 0.25,
         load_in_8bit=False,
+        torch_dtype=None,
         **kwargs,
     ):
         """
@@ -44,12 +45,13 @@ class Summarizer:
         :param int batch_stride: the amount of tokens to stride the batch by, defaults to 16
         :param float max_length_ratio: the ratio of the token_batch_length to use as the max_length for the model, defaults to 0.25
         :param bool load_in_8bit: whether to load the model in 8bit precision (LLM.int8), defaults to False
+        :param int torch_dtype: pytorch data type to load model as, defauls to None (native model type)
         :param kwargs: additional keyword arguments to pass to the model as inference parameters
         """
         self.logger = logging.getLogger(__name__)
 
         self.model_name_or_path = model_name_or_path
-        self.device = "cuda" if torch.cuda.is_available() and use_cuda else "cpu"
+        self.device = device
         self.logger.debug(f"loading model {model_name_or_path} to {self.device}")
 
         if load_in_8bit:
@@ -67,6 +69,7 @@ class Summarizer:
         else:
             self.model = AutoModelForSeq2SeqLM.from_pretrained(
                 self.model_name_or_path,
+                torch_dtype=torch_dtype,
             ).to(self.device)
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name_or_path)
@@ -175,8 +178,8 @@ class Summarizer:
         ids = ids[None, :]
         mask = mask[None, :]
 
-        input_ids = ids.to("cuda") if torch.cuda.is_available() else ids
-        attention_mask = mask.to("cuda") if torch.cuda.is_available() else mask
+        input_ids = ids.to(self.device) if torch.cuda.is_available() else ids
+        attention_mask = mask.to(self.device) if torch.cuda.is_available() else mask
 
         global_attention_mask = torch.zeros_like(attention_mask)
         # put global attention on <s> token
@@ -209,7 +212,10 @@ class Summarizer:
             remove_invalid_values=True,
         )
         self.logger.debug(f"summary: {summary}")
-        score = round(summary_pred_ids.sequences_scores.cpu().numpy()[0], 4)
+        if self.inference_params["num_beams"] == 1 and self.inference_params["num_beam_groups"] == 1:
+            score = 0
+        else:
+            score = round(summary_pred_ids.sequences_scores.cpu().numpy()[0], 4)
 
         return summary, score
 
@@ -258,7 +264,7 @@ class Summarizer:
         in_id_arr, att_arr = encoded_input.input_ids, encoded_input.attention_mask
 
         gen_summaries = []
-        pbar = tqdm(total=len(in_id_arr), desc="Generating Summaries")
+        pbar = tqdm(total=len(in_id_arr), desc="Generating Summaries", disable=True)
 
         for _id, _mask in zip(in_id_arr, att_arr):
 
